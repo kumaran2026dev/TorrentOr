@@ -1,0 +1,82 @@
+name: Repair BitFlow and Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Restore MainActivity from known-good parent
+        run: |
+          git checkout 68a7f324a40033d846f1759444f1b8ac0e517611 -- app/src/main/java/com/example/torrentor/MainActivity.kt
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/example/torrentor/MainActivity.kt')
+          s = p.read_text()
+          if 'import android.view.View' not in s:
+              s = s.replace('import android.util.Log\n', 'import android.util.Log\nimport android.view.View\n', 1)
+          p.write_text(s)
+          PY
+          git add app/src/main/java/com/example/torrentor/MainActivity.kt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: restore BitFlow UI and import Android View'
+          git push origin HEAD:main
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '12266719'
+
+      - name: Install Android build dependencies
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+
+      - name: Prepare libtorrent and Boost
+        run: |
+          git clone --depth 1 --branch libtorrent-2.0.13 https://github.com/arvidn/libtorrent.git /tmp/libtorrent
+          curl -L --fail -o /tmp/boost.tar.gz https://archives.boost.io/release/1.91.0/source/boost_1_91_0.tar.gz
+          tar -xzf /tmp/boost.tar.gz -C /tmp
+          echo "LIBTORRENT_DIR=/tmp/libtorrent" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=/tmp/boost_1_91_0" >> "$GITHUB_ENV"
+
+      - name: Verify native libraries
+        run: |
+          git lfs pull
+          test -f app/src/main/jniLibs/arm64-v8a/libtorrent.so
+          test -f app/src/main/jniLibs/armeabi-v7a/libtorrent.so
+
+      - name: Build debug APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitflow-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Remove repair workflow
+        if: success()
+        run: |
+          git rm .github/workflows/repair-bitflow-build.yml
+          git commit -m 'chore: remove one-time BitFlow repair workflow'
+          git push origin HEAD:main
