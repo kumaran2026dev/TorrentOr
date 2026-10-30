@@ -1,5 +1,7 @@
 name: Build BitFlow APK
 
+# Build verification after the BitFlow bottom-navigation repair.
+
 on:
   workflow_dispatch:
   push:
