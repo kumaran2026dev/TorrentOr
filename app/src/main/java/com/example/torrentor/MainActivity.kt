@@ -798,7 +798,7 @@ class MainActivity : AppCompatActivity() {
             fun bulkButton(label: String, action: () -> Unit): Button = Button(this).apply {
                 text = label
                 styleButton(this)
-                setOnClickListener(action)
+                setOnClickListener { action() }
             }
             bulkRow.addView(bulkButton("Pause") {
                 if (selectedTorrents.isEmpty()) Toast.makeText(this@MainActivity, "No torrents selected", Toast.LENGTH_SHORT).show()
