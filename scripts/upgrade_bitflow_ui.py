@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 P = Path('app/src/main/java/com/example/torrentor/MainActivity.kt')
 s = P.read_text(encoding='utf-8')
@@ -7,123 +6,395 @@ s = P.read_text(encoding='utf-8')
 if 'import android.view.View' not in s:
     s = s.replace('import android.widget.*\n', 'import android.widget.*\nimport android.view.View\n', 1)
 
+
+def replace_function(source: str, signature: str, replacement: str) -> str:
+    start = source.find(signature)
+    if start < 0:
+        raise SystemExit(f'Could not find function: {signature}')
+    brace = source.find('{', start)
+    if brace < 0:
+        raise SystemExit(f'Could not find function body: {signature}')
+    depth = 0
+    in_string = False
+    escaped = False
+    in_line_comment = False
+    in_block_comment = False
+    i = brace
+    while i < len(source):
+        c = source[i]
+        n = source[i + 1] if i + 1 < len(source) else ''
+        if in_line_comment:
+            if c == '\n':
+                in_line_comment = False
+        elif in_block_comment:
+            if c == '*' and n == '/':
+                in_block_comment = False
+                i += 1
+        elif in_string:
+            if escaped:
+                escaped = False
+            elif c == '\\':
+                escaped = True
+            elif c == '"':
+                in_string = False
+        else:
+            if c == '/' and n == '/':
+                in_line_comment = True
+                i += 1
+            elif c == '/' and n == '*':
+                in_block_comment = True
+                i += 1
+            elif c == '"':
+                in_string = True
+            elif c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return source[:start] + replacement.rstrip() + source[i + 1:]
+        i += 1
+    raise SystemExit(f'Unbalanced function body: {signature}')
+
+
 MAIN = r'''    private fun showMainScreen() {
-        stopNetworkFeaturesAutoRefresh(); stopStorageAutoRefresh(); stopGlobalStatsAutoRefresh(); stopRssUiRefresh(); stopLogUiRefresh()
-        currentDetailsTab = ""; currentDetailsTorrentIndex = -1; currentDetailsContentText = null; currentDetailsFileListLayout = null
+        stopNetworkFeaturesAutoRefresh()
+        stopStorageAutoRefresh()
+        stopGlobalStatsAutoRefresh()
+        stopRssUiRefresh()
+        stopLogUiRefresh()
+        currentDetailsTab = ""
+        currentDetailsTorrentIndex = -1
+        currentDetailsContentText = null
+        currentDetailsFileListLayout = null
+
         val d = resources.displayMetrics.density
-        fun dp(v:Int)=(v*d).toInt()
-        val bg=Color.parseColor("#F5F7FB"); val fg=Color.parseColor("#111827"); val muted=Color.parseColor("#6B7280"); val primary=Color.parseColor("#2563EB"); val border=Color.parseColor("#E5E7EB")
-        fun chip(label:String, selected:Boolean=false, action:()->Unit)=TextView(this).apply{ text=label;textSize=13f;gravity=android.view.Gravity.CENTER;setPadding(dp(14),0,dp(14),0);setTypeface(typeface,if(selected)android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL);setTextColor(if(selected)Color.WHITE else fg);background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(20).toFloat();setColor(if(selected)primary else Color.WHITE);if(!selected)setStroke(dp(1),border)};setOnClickListener{action()} }
-        fun button(label:String, action:()->Unit)=TextView(this).apply{ text=label;textSize=13f;gravity=android.view.Gravity.CENTER;setPadding(dp(12),0,dp(12),0);setTextColor(fg);background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(10).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)};setOnClickListener{action()} }
-        val content=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(16),dp(16),dp(96));setBackgroundColor(bg)}
-        val scroll=ScrollView(this).apply{isFillViewport=true;addView(content)}
-        val header=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL}
-        val logo=ImageView(this).apply{setImageResource(R.drawable.bitflow_logo);scaleType=ImageView.ScaleType.CENTER_INSIDE}
-        header.addView(logo,LinearLayout.LayoutParams(dp(44),dp(44)).apply{rightMargin=dp(10)})
-        val brand=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-        brand.addView(TextView(this).apply{text="BitFlow";textSize=25f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)})
-        brand.addView(TextView(this).apply{text="Torrent Downloader";textSize=12f;setTextColor(muted)})
-        header.addView(brand,LinearLayout.LayoutParams(0,-2,1f)); header.addView(TextView(this).apply{text="Downloads";textSize=13f;setTextColor(muted);gravity=android.view.Gravity.CENTER},LinearLayout.LayoutParams(-2,dp(44)))
-        content.addView(header); content.addView(Space(this).apply{layoutParams=LinearLayout.LayoutParams(1,dp(14))})
-        val search=EditText(this).apply{hint="Search downloads";setSingleLine(true);textSize=14f;setText(searchQuery);setSelection(text.length);setPadding(dp(14),0,dp(14),0);setTextColor(fg);setHintTextColor(muted);background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)};addTextChangedListener(object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){searchQuery=s?.toString()?:"";updateTorrentList()};override fun afterTextChanged(s:Editable?){} })}
-        content.addView(search,LinearLayout.LayoutParams(-1,dp(48))); content.addView(Space(this).apply{layoutParams=LinearLayout.LayoutParams(1,dp(10))})
-        val filterScroll=HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false}; val filters=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        for(label in arrayOf("All","Active","Paused","Completed")){filters.addView(chip(label,activeFilter==label){activeFilter=label;torrentListViewPrefs().edit().putString("filter",label).apply();selectedTorrents.clear();selectMode=false;showMainScreen()},LinearLayout.LayoutParams(dp(88),dp(40)).apply{rightMargin=dp(8)})}
-        filterScroll.addView(filters);content.addView(filterScroll);content.addView(Space(this).apply{layoutParams=LinearLayout.LayoutParams(1,dp(10))})
-        val toolbar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL}
-        toolbar.addView(TextView(this).apply{text="Downloads";textSize=20f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)},LinearLayout.LayoutParams(0,-2,1f))
-        toolbar.addView(button("Sort"){AlertDialog.Builder(this@MainActivity).setTitle("Sort downloads").setItems(TORRENT_SORT_MODES){_,which->sortMode=TORRENT_SORT_MODES[which];torrentListViewPrefs().edit().putString("sort",sortMode).apply();showMainScreen()}.show()},LinearLayout.LayoutParams(-2,dp(42)));content.addView(toolbar)
-        val selection=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;setPadding(0,dp(8),0,dp(8))}
-        selection.addView(button(if(selectMode)"Done" else "Select"){selectMode=!selectMode;selectedTorrents.clear();showMainScreen()},LinearLayout.LayoutParams(0,dp(40),1f).apply{rightMargin=dp(8)})
-        selection.addView(button("Select all"){if(selectMode){selectedTorrents.clear();selectedTorrents.addAll(getVisibleTorrentIndexes());updateTorrentList()}},LinearLayout.LayoutParams(0,dp(40),1f));content.addView(selection)
-        if(selectMode){val bulk=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL};bulk.addView(button("Pause"){selectedTorrents.toList().forEach{sendTorrentAction("PAUSE_TORRENT",it)};selectedTorrents.clear();selectMode=false;showMainScreen()},LinearLayout.LayoutParams(0,dp(40),1f).apply{rightMargin=dp(6)});bulk.addView(button("Resume"){selectedTorrents.toList().forEach{sendTorrentAction("RESUME_TORRENT",it)};selectedTorrents.clear();selectMode=false;showMainScreen()},LinearLayout.LayoutParams(0,dp(40),1f).apply{rightMargin=dp(6)});bulk.addView(button("Recheck"){selectedTorrents.toList().forEach{sendTorrentAction("RECHECK_TORRENT",it)};selectedTorrents.clear();selectMode=false;showMainScreen()},LinearLayout.LayoutParams(0,dp(40),1f));content.addView(bulk)}
-        val speedCard=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(14),dp(10),dp(14),dp(10));background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(14).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)}}
-        speedGraphText=TextView(this).apply{text="↓ 0 KB/s     ↑ 0 KB/s";textSize=13f;setTextColor(muted)};speedGraphView=SpeedGraphView(this);speedGraphView.setBackgroundColor(Color.WHITE);speedCard.addView(speedGraphText,LinearLayout.LayoutParams(-1,dp(25)));speedCard.addView(speedGraphView,LinearLayout.LayoutParams(-1,dp(70)));content.addView(speedCard,LinearLayout.LayoutParams(-1,dp(112)).apply{bottomMargin=dp(12);topMargin=dp(8)})
-        listLayout=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};content.addView(listLayout,LinearLayout.LayoutParams(-1,-2))
-        content.addView(TextView(this).apply{text="Tap any download for the full torrent dashboard: files, peers, trackers, pieces, swarm health, statistics and controls.";textSize=12f;setTextColor(muted);setPadding(0,dp(8),0,dp(4))})
-        setContentView(wrapWithBitFlowBottomNav(scroll,"home"));isOnMainScreen=true;updateTorrentList()
+        fun dp(v: Int) = (v * d).toInt()
+        val bg = Color.parseColor("#F5F7FB")
+        val fg = Color.parseColor("#111827")
+        val muted = Color.parseColor("#6B7280")
+        val primary = Color.parseColor("#2563EB")
+        val border = Color.parseColor("#E5E7EB")
+
+        fun button(label: String, action: () -> Unit) = TextView(this).apply {
+            text = label
+            textSize = 13f
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(12), 0, dp(12), 0)
+            setTextColor(fg)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), border)
+            }
+            setOnClickListener { action() }
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(92))
+            setBackgroundColor(bg)
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(content)
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val logo = ImageView(this).apply {
+            setImageResource(R.drawable.bitflow_logo)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }
+        header.addView(logo, LinearLayout.LayoutParams(dp(42), dp(42)).apply { rightMargin = dp(10) })
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brand.addView(TextView(this).apply {
+            text = "BitFlow"
+            textSize = 25f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(fg)
+        })
+        brand.addView(TextView(this).apply {
+            text = "Torrent Downloader"
+            textSize = 12f
+            setTextColor(muted)
+        })
+        header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(TextView(this).apply {
+            text = "Downloads"
+            textSize = 13f
+            setTextColor(muted)
+            gravity = android.view.Gravity.CENTER
+        }, LinearLayout.LayoutParams(-2, dp(42)))
+        content.addView(header)
+        content.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(12)) })
+
+        val search = EditText(this).apply {
+            hint = "Search downloads"
+            setSingleLine(true)
+            textSize = 14f
+            setText(searchQuery)
+            setSelection(text.length)
+            setPadding(dp(14), 0, dp(14), 0)
+            setTextColor(fg)
+            setHintTextColor(muted)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), border)
+            }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    searchQuery = s?.toString() ?: ""
+                    updateTorrentList()
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        content.addView(search, LinearLayout.LayoutParams(-1, dp(48)))
+        content.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(10)) })
+
+        val filterScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        arrayOf("All", "Active", "Paused", "Completed").forEach { label ->
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 13f
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(12), 0, dp(12), 0)
+                setTextColor(if (activeFilter == label) Color.WHITE else fg)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dp(20).toFloat()
+                    setColor(if (activeFilter == label) primary else Color.WHITE)
+                    if (activeFilter != label) setStroke(dp(1), border)
+                }
+                setOnClickListener {
+                    activeFilter = label
+                    torrentListViewPrefs().edit().putString("filter", label).apply()
+                    selectedTorrents.clear()
+                    selectMode = false
+                    showMainScreen()
+                }
+            }
+            filters.addView(chip, LinearLayout.LayoutParams(dp(88), dp(40)).apply { rightMargin = dp(8) })
+        }
+        filterScroll.addView(filters)
+        content.addView(filterScroll)
+        content.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(8)) })
+
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        toolbar.addView(TextView(this).apply {
+            text = "Downloads"
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(fg)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        toolbar.addView(button("Sort") {
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("Sort downloads")
+                .setItems(TORRENT_SORT_MODES) { _, which ->
+                    sortMode = TORRENT_SORT_MODES[which]
+                    torrentListViewPrefs().edit().putString("sort", sortMode).apply()
+                    showMainScreen()
+                }.show()
+        }, LinearLayout.LayoutParams(-2, dp(42)))
+        content.addView(toolbar)
+
+        val selection = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(8), 0, dp(8))
+        }
+        selection.addView(button(if (selectMode) "Done" else "Select") {
+            selectMode = !selectMode
+            selectedTorrents.clear()
+            showMainScreen()
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(8) })
+        selection.addView(button("Select all") {
+            if (selectMode) {
+                selectedTorrents.clear()
+                selectedTorrents.addAll(getVisibleTorrentIndexes())
+                updateTorrentList()
+            }
+        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        content.addView(selection)
+
+        if (selectMode) {
+            val bulk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            bulk.addView(button("Pause") {
+                selectedTorrents.toList().forEach { sendTorrentAction("PAUSE_TORRENT", it) }
+                selectedTorrents.clear(); selectMode = false; showMainScreen()
+            }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(6) })
+            bulk.addView(button("Resume") {
+                selectedTorrents.toList().forEach { sendTorrentAction("RESUME_TORRENT", it) }
+                selectedTorrents.clear(); selectMode = false; showMainScreen()
+            }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(6) })
+            bulk.addView(button("Recheck") {
+                selectedTorrents.toList().forEach { sendTorrentAction("RECHECK_TORRENT", it) }
+                selectedTorrents.clear(); selectMode = false; showMainScreen()
+            }, LinearLayout.LayoutParams(0, dp(40), 1f))
+            content.addView(bulk)
+        }
+
+        val speedCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat(); setColor(Color.WHITE); setStroke(dp(1), border)
+            }
+        }
+        speedGraphText = TextView(this).apply { text = "↓ 0 KB/s     ↑ 0 KB/s"; textSize = 13f; setTextColor(muted) }
+        speedGraphView = SpeedGraphView(this)
+        speedGraphView.setBackgroundColor(Color.WHITE)
+        speedCard.addView(speedGraphText, LinearLayout.LayoutParams(-1, dp(25)))
+        speedCard.addView(speedGraphView, LinearLayout.LayoutParams(-1, dp(70)))
+        content.addView(speedCard, LinearLayout.LayoutParams(-1, dp(112)).apply { topMargin = dp(8); bottomMargin = dp(12) })
+
+        listLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(listLayout, LinearLayout.LayoutParams(-1, -2))
+        content.addView(TextView(this).apply {
+            text = "Tap a download for its full dashboard: files, peers, trackers, web seeds, swarm, pieces, statistics and controls."
+            textSize = 12f; setTextColor(muted); setPadding(0, dp(8), 0, dp(4))
+        })
+
+        setContentView(wrapWithBitFlowBottomNav(scroll, "home"))
+        isOnMainScreen = true
+        updateTorrentList()
     }
 '''
 
 SETTINGS = r'''    private fun showSettingsScreen() {
-        stopNetworkFeaturesAutoRefresh(); stopStorageAutoRefresh(); stopGlobalStatsAutoRefresh(); stopRssUiRefresh(); stopLogUiRefresh()
-        currentDetailsTab="";currentDetailsTorrentIndex=-1;currentDetailsContentText=null;currentDetailsFileListLayout=null
-        val d=resources.displayMetrics.density; fun dp(v:Int)=(v*d).toInt(); val bg=Color.parseColor("#F5F7FB");val fg=Color.parseColor("#111827");val muted=Color.parseColor("#6B7280");val border=Color.parseColor("#E5E7EB")
-        val content=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(18),dp(16),dp(96));setBackgroundColor(bg)}
-        val scroll=ScrollView(this).apply{isFillViewport=true;addView(content)}
-        content.addView(TextView(this).apply{text="Settings";textSize=28f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)})
-        content.addView(TextView(this).apply{text="Every BitFlow feature, grouped by category";textSize=13f;setTextColor(muted);setPadding(0,dp(4),0,dp(18))})
-        fun row(title:String,desc:String,action:()->Unit)=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL;setPadding(dp(14),dp(11),dp(10),dp(11));background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)};setOnClickListener{action()};addView(TextView(this@MainActivity).apply{text="•";textSize=22f;setTextColor(Color.parseColor("#2563EB"));gravity=android.view.Gravity.CENTER},LinearLayout.LayoutParams(dp(30),dp(42)));val box=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL};box.addView(TextView(this@MainActivity).apply{text=title;textSize=15f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)});box.addView(TextView(this@MainActivity).apply{text=desc;textSize=12f;setTextColor(muted);setPadding(0,dp(3),0,0)});addView(box,LinearLayout.LayoutParams(0,-2,1f));addView(TextView(this@MainActivity).apply{text="›";textSize=24f;setTextColor(muted);gravity=android.view.Gravity.CENTER},LinearLayout.LayoutParams(dp(24),-1))}
-        fun section(title:String,subtitle:String,items:List<Triple<String,String,()->Unit>>){content.addView(TextView(this).apply{text=title;textSize=13f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(muted);setPadding(dp(2),dp(8),dp(2),dp(5))});content.addView(TextView(this).apply{text=subtitle;textSize=11f;setTextColor(muted);setPadding(dp(2),0,dp(2),dp(6))});items.forEachIndexed{i,item->content.addView(row(item.first,item.second,item.third),LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=if(i==items.lastIndex)dp(5)else dp(7)})}}
-        section("Downloads","Storage and transfer behavior",listOf(Triple("Save folder","Default folder, folder browser and new folders",::showSaveFolderScreen),Triple("Speed limits","Global upload/download speed limits",::showSpeedLimitsScreen),Triple("Storage","Free space and low-storage warning threshold",::showStorageScreen)))
-        section("Network","Connectivity and peer discovery",listOf(Triple("Connection","Listening/network connectivity diagnostics",::showConnectionScreen),Triple("Network features","DHT, PEX, LSD and protocol encryption",::showNetworkFeaturesScreen)))
-        section("Discovery","Find new torrents",listOf(Triple("Online search","Provider search, filtering, sorting and provider settings",::showOnlineSearchScreen),Triple("RSS feeds","Feeds, refresh, add-all and auto-download",::showRssScreen)))
-        section("Diagnostics","Inspect the engine",listOf(Triple("Statistics","Live global torrent/session statistics",::showGlobalStatsScreen),Triple("Execution log","INFO/WARNING/ERROR, auto-scroll, clear and copy",::showExecutionLogScreen)))
-        section("Appearance","Personalize the interface",listOf(Triple("Theme","Current theme: ${currentThemeName()} — tap to change",::switchTheme)))
-        section("About","Application information",listOf(Triple("About BitFlow","Version 1.0.0 and app information",::showAboutDialog)))
-        setContentView(wrapWithBitFlowBottomNav(scroll,"settings"))
+        stopNetworkFeaturesAutoRefresh()
+        stopStorageAutoRefresh()
+        stopGlobalStatsAutoRefresh()
+        stopRssUiRefresh()
+        stopLogUiRefresh()
+        currentDetailsTab = ""
+        currentDetailsTorrentIndex = -1
+        currentDetailsContentText = null
+        currentDetailsFileListLayout = null
+
+        val d = resources.displayMetrics.density
+        fun dp(v: Int) = (v * d).toInt()
+        val bg = Color.parseColor("#F5F7FB")
+        val fg = Color.parseColor("#111827")
+        val muted = Color.parseColor("#6B7280")
+        val border = Color.parseColor("#E5E7EB")
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(18), dp(16), dp(92))
+            setBackgroundColor(bg)
+        }
+        val scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
+        content.addView(TextView(this).apply {
+            text = "Settings"; textSize = 28f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(fg)
+        })
+        content.addView(TextView(this).apply {
+            text = "All BitFlow features in one place"; textSize = 13f; setTextColor(muted); setPadding(0, dp(4), 0, dp(16))
+        })
+
+        fun row(title: String, desc: String, action: () -> Unit) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(11), dp(10), dp(11))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat(); setColor(Color.WHITE); setStroke(dp(1), border)
+            }
+            setOnClickListener { action() }
+            addView(TextView(this@MainActivity).apply { text = "•"; textSize = 22f; setTextColor(Color.parseColor("#2563EB")); gravity = android.view.Gravity.CENTER }, LinearLayout.LayoutParams(dp(30), dp(42)))
+            val box = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+            box.addView(TextView(this@MainActivity).apply { text = title; textSize = 15f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(fg) })
+            box.addView(TextView(this@MainActivity).apply { text = desc; textSize = 12f; setTextColor(muted); setPadding(0, dp(3), 0, 0) })
+            addView(box, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(TextView(this@MainActivity).apply { text = "›"; textSize = 24f; setTextColor(muted); gravity = android.view.Gravity.CENTER }, LinearLayout.LayoutParams(dp(24), -1))
+        }
+        fun section(title: String, subtitle: String, items: List<Triple<String, String, () -> Unit>>) {
+            content.addView(TextView(this).apply { text = title; textSize = 13f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(muted); setPadding(dp(2), dp(8), dp(2), dp(4)) })
+            content.addView(TextView(this).apply { text = subtitle; textSize = 11f; setTextColor(muted); setPadding(dp(2), 0, dp(2), dp(6)) })
+            items.forEachIndexed { i, item ->
+                content.addView(row(item.first, item.second, item.third), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = if (i == items.lastIndex) dp(5) else dp(7) })
+            }
+        }
+
+        section("Downloads", "Storage and transfer", listOf(
+            Triple("Save folder", "Choose the download folder and create folders", { showSaveFolderScreen() }),
+            Triple("Speed limits", "Global download and upload limits", { showSpeedLimitsScreen() }),
+            Triple("Storage", "Free space and low-storage threshold", { showStorageScreen() })
+        ))
+        section("Network", "Connectivity and peers", listOf(
+            Triple("Connection", "Listening and connectivity diagnostics", { showConnectionScreen() }),
+            Triple("Network features", "DHT, PEX, LSD and protocol encryption", { showNetworkFeaturesScreen() })
+        ))
+        section("Discovery", "Find new torrents", listOf(
+            Triple("Online search", "Providers, search filters and sorting", { showOnlineSearchScreen() }),
+            Triple("RSS feeds", "Feeds, refresh and auto-download", { showRssScreen() })
+        ))
+        section("Diagnostics", "Inspect the engine", listOf(
+            Triple("Statistics", "Live session and torrent statistics", { showGlobalStatsScreen() }),
+            Triple("Execution log", "INFO/WARNING/ERROR logs and actions", { showExecutionLogScreen() })
+        ))
+        section("Appearance", "Personalize BitFlow", listOf(
+            Triple("Theme", "Current theme: ${currentThemeName()}", { switchTheme() })
+        ))
+        section("About", "Application information", listOf(
+            Triple("About BitFlow", "Version 1.0.0 and app information", { showAboutDialog() })
+        ))
+
+        setContentView(wrapWithBitFlowBottomNav(scroll, "settings"))
     }
 
     private fun wrapWithBitFlowBottomNav(content: View, selected: String): View {
-        val d=resources.displayMetrics.density;fun dp(v:Int)=(v*d).toInt();val fg=Color.parseColor("#111827");val muted=Color.parseColor("#9CA3AF");val primary=Color.parseColor("#2563EB")
-        val root=FrameLayout(this);root.setBackgroundColor(Color.parseColor("#F5F7FB"));root.addView(content,FrameLayout.LayoutParams(-1,-1))
-        val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER;setPadding(dp(10),dp(4),dp(10),dp(6));setBackgroundColor(Color.WHITE);elevation=dp(8).toFloat()}
-        fun item(icon:String,label:String,key:String,large:Boolean=false,action:()->Unit)=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=android.view.Gravity.CENTER;setOnClickListener{action()};addView(TextView(this@MainActivity).apply{text=icon;textSize=if(large)27f else 22f;gravity=android.view.Gravity.CENTER;setTextColor(if(selected==key)primary else muted);setTypeface(typeface,if(selected==key)android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)},LinearLayout.LayoutParams(-1,dp(if(large)32 else 28)));addView(TextView(this@MainActivity).apply{text=label;textSize=10f;gravity=android.view.Gravity.CENTER;setTextColor(if(selected==key)fg else muted);setTypeface(typeface,if(selected==key)android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)},LinearLayout.LayoutParams(-1,dp(18)))}
-        bar.addView(item("⌂","Home","home"){showMainScreen()},LinearLayout.LayoutParams(0,dp(52),1f));bar.addView(item("＋","Add","add",true){showAddDownloadDialog()},LinearLayout.LayoutParams(0,dp(52),1f));bar.addView(item("⚙","Settings","settings"){showSettingsScreen()},LinearLayout.LayoutParams(0,dp(52),1f))
-        root.addView(bar,FrameLayout.LayoutParams(-1,dp(64)).apply{gravity=android.view.Gravity.BOTTOM});return root
-    }
-
-    private fun showAboutDialog() {
-        AlertDialog.Builder(this).setTitle("BitFlow").setMessage("BitFlow: Torrent Downloader\nVersion 1.0.0\n\nFast, simple torrent downloading for Android.").setPositiveButton("OK",null).show()
-    }
-'''
-
-DETAIL = r'''    private fun showTorrentDetails(torrentIndex: Int) {
-        stopNetworkFeaturesAutoRefresh();stopStorageAutoRefresh();stopGlobalStatsAutoRefresh();stopRssUiRefresh();stopLogUiRefresh()
-        val d=resources.displayMetrics.density;fun dp(v:Int)=(v*d).toInt();val bg=Color.parseColor("#F5F7FB");val fg=Color.parseColor("#111827");val muted=Color.parseColor("#6B7280");val border=Color.parseColor("#E5E7EB");val primary=Color.parseColor("#2563EB")
-        val statusLine=getTorrentStatusLine(torrentIndex);val name=extractTorrentName(statusLine,torrentIndex);val state=extractFieldAfterName(statusLine,1);val progress=extractFieldAfterName(statusLine,2);val down=extractFieldByPrefix(statusLine,"↓");val up=extractFieldByPrefix(statusLine,"↑");val eta=extractEta(statusLine)
-        val content=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(10),dp(16),dp(28));setBackgroundColor(bg)};val scroll=ScrollView(this).apply{isFillViewport=true;addView(content)}
-        val header=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL};header.addView(TextView(this).apply{text="‹";textSize=34f;setTextColor(fg);gravity=android.view.Gravity.CENTER;setOnClickListener{showMainScreen()}},LinearLayout.LayoutParams(dp(42),dp(48)));header.addView(TextView(this).apply{text="Torrent details";textSize=21f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)},LinearLayout.LayoutParams(0,-2,1f));content.addView(header)
-        val hero=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(15),dp(16),dp(15));background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(16).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)}}
-        hero.addView(TextView(this).apply{text=name;textSize=18f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)});hero.addView(TextView(this).apply{text=state;textSize=12f;setTextColor(primary);setPadding(0,dp(4),0,dp(9))})
-        hero.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;this.progress=extractPercent(statusLine);progressDrawable.setTint(primary)},LinearLayout.LayoutParams(-1,dp(8)));hero.addView(TextView(this).apply{text=progress;textSize=13f;setTextColor(fg);setPadding(0,dp(7),0,0)});content.addView(hero,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(10)})
-        val metrics=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL};fun metric(label:String,value:String)=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(9),dp(9),dp(9),dp(9));background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)};addView(TextView(this@MainActivity).apply{text=value;textSize=13f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)});addView(TextView(this@MainActivity).apply{text=label;textSize=10f;setTextColor(muted);setPadding(0,dp(3),0,0)})}
-        metrics.addView(metric("Download",down),LinearLayout.LayoutParams(0,dp(66),1f).apply{rightMargin=dp(6)});metrics.addView(metric("Upload",up),LinearLayout.LayoutParams(0,dp(66),1f).apply{rightMargin=dp(6)});metrics.addView(metric("ETA",eta),LinearLayout.LayoutParams(0,dp(66),1f));content.addView(metrics,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(10)})
-        val tabsScroll=HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false};val tabs=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL};tabsScroll.addView(tabs);content.addView(tabsScroll,LinearLayout.LayoutParams(-1,dp(45)))
-        val card=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(13),dp(13),dp(13),dp(13));background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(14).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)}};val text=TextView(this).apply{textSize=13f;setTextColor(fg);setTextIsSelectable(true)};val files=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};card.addView(text);card.addView(files);content.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(7);bottomMargin=dp(12)})
-        currentDetailsTorrentIndex=torrentIndex;currentDetailsContentText=text;currentDetailsFileListLayout=files;filesBuiltForIndex=-1;filesPendingSelection=null;filesProgressViews.clear();filesPrevProgressSnapshot.clear()
-        fun clear(){text.text="";files.removeAllViews()};fun load(key:String){currentDetailsTab=key;clear();when(key){"General"->showGeneralDetails(torrentIndex,text);"Files"->showFilesForOpening(torrentIndex,files,text);"Peers"->text.text=try{TorrentNative.getTorrentPeers(torrentIndex)}catch(_ :Throwable){"Could not load peers"};"Trackers"->text.text=try{TorrentNative.getTorrentTrackerStatus(torrentIndex)}catch(_ :Throwable){try{"Trackers\n\n"+TorrentNative.getTorrentTrackers(torrentIndex)}catch(_ :Throwable){"Could not load tracker status"}};"Web Seeds"->text.text=try{"Web Seeds\n\n"+TorrentNative.getTorrentWebSeeds(torrentIndex)}catch(_ :Throwable){"Could not load web seeds"};"Swarm"->text.text=try{TorrentNative.getTorrentSwarmHealth(torrentIndex)}catch(_ :Throwable){"Could not load swarm health"};"Pieces"->showPiecesDetails(torrentIndex,text);"Statistics"->text.text=try{TorrentNative.getTorrentStatistics(torrentIndex)}catch(_ :Throwable){"Could not load statistics"};"Comment"->text.text=try{"Torrent Comment\n\n"+TorrentNative.getTorrentComment(torrentIndex)}catch(_ :Throwable){"Could not load torrent comment"}}}
-        fun tab(label:String,key:String){tabs.addView(TextView(this).apply{text=label;textSize=12f;gravity=android.view.Gravity.CENTER;setPadding(dp(13),0,dp(13),0);setTextColor(fg);background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(18).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)};setOnClickListener{load(key)}},LinearLayout.LayoutParams(-2,dp(37)).apply{rightMargin=dp(7)}})}
-        tab("Overview","General");tab("Files","Files");tab("Peers","Peers");tab("Trackers","Trackers");tab("Web Seeds","Web Seeds");tab("Swarm","Swarm");tab("Pieces","Pieces");tab("Statistics","Statistics");tab("Comment","Comment");load("General")
-        content.addView(TextView(this).apply{text="Torrent controls";textSize=17f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg);setPadding(0,dp(4),0,dp(8))})
-        fun control(label:String,action:()->Unit)=TextView(this).apply{text=label;textSize=12f;gravity=android.view.Gravity.CENTER;setTextColor(fg);background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(10).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)};setOnClickListener{action()}}
-        fun row(vararg pairs:Pair<String,()->Unit>){val r=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL};pairs.forEachIndexed{i,p->r.addView(control(p.first,p.second),LinearLayout.LayoutParams(0,dp(43),1f).apply{if(i<pairs.lastIndex)rightMargin=dp(6)})};content.addView(r,LinearLayout.LayoutParams(-1,dp(43)).apply{bottomMargin=dp(7)})}
-        fun service(action:String,msg:String){val intent=Intent(this@MainActivity,TorrentService::class.java);intent.putExtra("ACTION",action);intent.putExtra("TORRENT_INDEX",torrentIndex);intent.putExtra("TORRENT_HASH",getSafeTorrentHashForAction(torrentIndex));intent.putExtra("TORRENT_MAGNET",getSafeTorrentMagnetForAction(torrentIndex));startTorrentService(intent);Toast.makeText(this@MainActivity,msg,Toast.LENGTH_SHORT).show();showTorrentDetails(torrentIndex)}
-        row("Pause" to {service("PAUSE_TORRENT","Torrent paused")},"Resume" to {service("RESUME_TORRENT","Torrent resumed")},"Recheck" to {TorrentNative.forceRecheck(torrentIndex);Toast.makeText(this,"Force recheck started",Toast.LENGTH_SHORT).show()})
-        row("Reannounce" to {TorrentNative.forceReannounce(torrentIndex);Toast.makeText(this,"Reannounce sent",Toast.LENGTH_SHORT).show()},"Copy Magnet" to {val m=TorrentNative.getTorrentMagnet(torrentIndex);val c=getSystemService(CLIPBOARD_SERVICE) as ClipboardManager;c.setPrimaryClip(ClipData.newPlainText("Magnet",m));Toast.makeText(this,"Magnet copied",Toast.LENGTH_SHORT).show()},"Copy Hash" to {val h=TorrentNative.getTorrentHash(torrentIndex);val c=getSystemService(CLIPBOARD_SERVICE) as ClipboardManager;c.setPrimaryClip(ClipData.newPlainText("Hash",h));Toast.makeText(this,"Hash copied",Toast.LENGTH_SHORT).show()})
-        row("Sequential" to {val h=getSafeTorrentHashForAction(torrentIndex);val e=try{TorrentNative.getSequentialDownload(h)}catch(_ :Throwable){false};val ok=try{TorrentNative.setSequentialDownload(h,!e)}catch(_ :Throwable){false};Toast.makeText(this,if(ok)"Sequential: ${if(!e)"On" else "Off"}" else "Could not change sequential mode",Toast.LENGTH_SHORT).show()},"First/Last" to {val h=getSafeTorrentHashForAction(torrentIndex);val e=try{TorrentNative.getFirstLastPiecePriority(h)}catch(_ :Throwable){false};val ok=try{TorrentNative.setFirstLastPiecePriority(h,!e)}catch(_ :Throwable){false};Toast.makeText(this,if(ok)"First/last priority: ${if(!e)"On" else "Off"}" else "Could not change priority",Toast.LENGTH_SHORT).show()},"Open Folder" to {val h=getSafeTorrentHashForAction(torrentIndex);openDownloadFolder(getSavedSaveFolderForHash(h)?:getGlobalSaveFolder())})
-        row("Save .torrent" to {val h=getSafeTorrentHashForAction(torrentIndex);val dir=File(savePath,"Saved Torrent Files");dir.mkdirs();val out=try{TorrentNative.saveTorrentFile(h,dir.absolutePath)}catch(_ :Throwable){""};Toast.makeText(this,if(out.isNotBlank())"Saved to $out" else "Metadata not ready yet",Toast.LENGTH_LONG).show()},"Change Folder" to {val h=getSafeTorrentHashForAction(torrentIndex);showFolderPickerDialog(getSavedSaveFolderForHash(h)?:getGlobalSaveFolder()){newPath->val moved=try{TorrentNative.moveTorrentStorage(h,newPath)}catch(_ :Throwable){false};if(moved){saveSaveFolderForHash(h,newPath);Toast.makeText(this,"Save folder updated",Toast.LENGTH_SHORT).show();showTorrentDetails(torrentIndex)}else Toast.makeText(this,"Could not change save folder",Toast.LENGTH_SHORT).show()}},"Delete" to {showDeleteDialogFromDetails(torrentIndex)})
-        val limit=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(11),dp(12),dp(11));background=android.graphics.drawable.GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(Color.WHITE);setStroke(dp(1),border)}};limit.addView(TextView(this).apply{text="Per-torrent speed limits (KB/s, 0 = global)";textSize=13f;setTypeface(typeface,android.graphics.Typeface.BOLD);setTextColor(fg)})
-        val saved=try{TorrentNative.getTorrentSpeedLimits(getSafeTorrentHashForAction(torrentIndex)).split("|")}catch(_ :Throwable){emptyList()};val upInput=EditText(this).apply{hint="Upload KB/s";inputType=android.text.InputType.TYPE_CLASS_NUMBER;setText(saved.getOrNull(0)?.toIntOrNull()?.takeIf{it>0}?.div(1024)?.toString()?:"")};val downInput=EditText(this).apply{hint="Download KB/s";inputType=android.text.InputType.TYPE_CLASS_NUMBER;setText(saved.getOrNull(1)?.toIntOrNull()?.takeIf{it>0}?.div(1024)?.toString()?:"")};val lr=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL};lr.addView(upInput,LinearLayout.LayoutParams(0,dp(50),1f).apply{rightMargin=dp(6)});lr.addView(downInput,LinearLayout.LayoutParams(0,dp(50),1f));limit.addView(lr);limit.addView(control("Apply Speed Limits"){val h=getSafeTorrentHashForAction(torrentIndex);val u=(upInput.text.toString().toIntOrNull()?:0)*1024;val downv=(downInput.text.toString().toIntOrNull()?:0)*1024;val ok=try{TorrentNative.setTorrentSpeedLimits(h,u,downv)}catch(_ :Throwable){false};if(ok)torrentSpeedLimitPrefs().edit().putString(normalizeHashForDateKey(h),"$u|$downv").apply();Toast.makeText(this,if(ok)"Speed limits applied" else "Could not apply speed limits",Toast.LENGTH_SHORT).show()});content.addView(limit,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(12)})
-        setContentView(scroll)
+        val d = resources.displayMetrics.density
+        fun dp(v: Int) = (v * d).toInt()
+        val fg = Color.parseColor("#111827")
+        val muted = Color.parseColor("#9CA3AF")
+        val primary = Color.parseColor("#2563EB")
+        val root = FrameLayout(this)
+        root.addView(content, FrameLayout.LayoutParams(-1, -1))
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(10), dp(4), dp(10), dp(6))
+            setBackgroundColor(Color.WHITE)
+            elevation = dp(8).toFloat()
+        }
+        fun item(icon: String, label: String, key: String, action: () -> Unit) = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setOnClickListener { action() }
+            addView(TextView(this@MainActivity).apply {
+                text = icon; textSize = 23f; gravity = android.view.Gravity.CENTER
+                setTextColor(if (selected == key) primary else muted)
+                setTypeface(typeface, if (selected == key) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            }, LinearLayout.LayoutParams(-1, dp(31)))
+            addView(TextView(this@MainActivity).apply {
+                text = label; textSize = 10f; gravity = android.view.Gravity.CENTER
+                setTextColor(if (selected == key) fg else muted)
+                setTypeface(typeface, if (selected == key) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            }, LinearLayout.LayoutParams(-1, dp(18)))
+        }
+        bar.addView(item("⌂", "Home", "home") { showMainScreen() }, LinearLayout.LayoutParams(0, dp(52), 1f))
+        bar.addView(item("＋", "Add", "add") { showAddDownloadDialog() }, LinearLayout.LayoutParams(0, dp(52), 1f))
+        bar.addView(item("⚙", "Settings", "settings") { showSettingsScreen() }, LinearLayout.LayoutParams(0, dp(52), 1f))
+        root.addView(bar, FrameLayout.LayoutParams(-1, dp(64)).apply { gravity = android.view.Gravity.BOTTOM })
+        return root
     }
 '''
 
-def replace(name, nxt, repl):
-    global s
-    pat = rf'(?s)    private fun {name}\(.*?\n    private fun {nxt}\('
-    m = re.search(pat, s)
-    if not m: raise SystemExit(f'missing {name}')
-    tail = s[m.end()-len(f'    private fun {nxt}('):]
-    s = s[:m.start()] + repl + '\n\n' + tail
+s = replace_function(s, 'private fun showMainScreen()', MAIN)
+s = replace_function(s, 'private fun showSettingsScreen()', SETTINGS)
 
-replace('showMainScreen','showAddDownloadDialog',MAIN)
-replace('showSettingsScreen','showAboutDialog',SETTINGS)
-replace('showTorrentDetails','showPiecesDetails',DETAIL)
+# The modern Home filter calls this helper; add it once if the project does not already have it.
+if 'private fun getVisibleTorrentIndexes()' not in s:
+    marker = '    private fun updateTorrentList()'
+    helper = '''    private fun getVisibleTorrentIndexes(): List<Int> {\n        val out = mutableListOf<Int>()\n        val data = getTorrentList()\n        for (i in data.indices) {\n            val line = data[i]\n            if (searchQuery.isNotBlank() && !line.contains(searchQuery, ignoreCase = true)) continue\n            val matches = when (activeFilter) {\n                "Active" -> line.contains("Downloading", true) || line.contains("Seeding", true)\n                "Paused" -> line.contains("Paused", true)\n                "Completed" -> line.contains("Completed", true)\n                else -> true\n            }\n            if (matches) out.add(i)\n        }\n        return out\n    }\n\n'''
+    if marker in s:
+        s = s.replace(marker, helper + marker, 1)
 
-old='''        return when (activeFilter) {\n            "Downloading" -> lower.contains("downloading")\n            "Seeding" -> lower.contains("seeding")\n            "Paused" -> lower.contains("paused")\n            "Completed" -> percent >= 100 || lower.contains("seeding")\n            else -> true\n        }'''
-new='''        return when (activeFilter) {\n            "Active" -> lower.contains("downloading") || lower.contains("seeding")\n            "Paused" -> lower.contains("paused")\n            "Completed" -> percent >= 100 || lower.contains("seeding")\n            else -> true\n        }'''
-if old not in s: raise SystemExit('missing filter')
-s=s.replace(old,new,1)
-P.write_text(s,encoding='utf-8')
-print('UI upgrade applied:',len(s.splitlines()),'lines')
+P.write_text(s, encoding='utf-8')
+print('Safe BitFlow UI upgrade applied')
