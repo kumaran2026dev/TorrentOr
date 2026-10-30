@@ -6,9 +6,17 @@ on:
 permissions:
   contents: write
 jobs:
-  test:
+  migrate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test
-        run: echo "migration runner works again"
+      - name: Apply migration
+        run: python3 scripts/apply_bitflow_ui.py
+      - name: Commit migration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/example/torrentor/MainActivity.kt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Migrate BitFlow UI safely while preserving backend screens'
+          git push
