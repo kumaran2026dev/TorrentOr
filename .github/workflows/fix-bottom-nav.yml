@@ -1,0 +1,103 @@
+name: Fix BitFlow Bottom Navigation
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Add fixed bottom navigation to BitFlow
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/main/java/com/example/torrentor/MainActivity.kt")
+          text = path.read_text()
+
+          if "// BITFLOW_BOTTOM_NAV_V1" in text:
+              print("Bottom navigation already present; nothing to change.")
+          else:
+              old = '''        root.addView(listLayout, LinearLayout.LayoutParams(-1, -2))
+          root.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(12)) })
+          root.addView(button("+  Add download", true) { showAddDownloadDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+
+          speedGraphText = TextView(this)
+          speedGraphView = SpeedGraphView(this)
+          speedGraphText.visibility = android.view.View.GONE
+          speedGraphView.visibility = android.view.View.GONE
+          setContentView(scroll)
+'''
+              new = '''        root.addView(listLayout, LinearLayout.LayoutParams(-1, -2))
+
+          speedGraphText = TextView(this)
+          speedGraphView = SpeedGraphView(this)
+          speedGraphText.visibility = android.view.View.GONE
+          speedGraphView.visibility = android.view.View.GONE
+
+          // BITFLOW_BOTTOM_NAV_V1: keep navigation fixed at the bottom instead
+          // of putting it inside the scrolling downloads content.
+          root.setPadding(dp(16), dp(16), dp(16), dp(92))
+          val bottomBar = LinearLayout(this).apply {
+              orientation = LinearLayout.HORIZONTAL
+              gravity = android.view.Gravity.CENTER
+              setPadding(dp(8), dp(6), dp(8), dp(6))
+              setBackgroundColor(Color.WHITE)
+              elevation = dp(5).toFloat()
+          }
+
+          fun navItem(label: String, selected: Boolean = false, action: () -> Unit): TextView {
+              return TextView(this).apply {
+                  text = label
+                  textSize = 13f
+                  gravity = android.view.Gravity.CENTER
+                  setTypeface(typeface, android.graphics.Typeface.BOLD)
+                  setTextColor(if (selected) Color.WHITE else fg)
+                  background = android.graphics.drawable.GradientDrawable().apply {
+                      cornerRadius = dp(10).toFloat()
+                      setColor(if (selected) primary else Color.WHITE)
+                      if (!selected) setStroke(dp(1), border)
+                  }
+                  setOnClickListener { action() }
+              }
+          }
+
+          bottomBar.addView(navItem("Downloads", true) { showMainScreen() }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
+          bottomBar.addView(navItem("+ Add", false) { showAddDownloadDialog() }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
+          bottomBar.addView(navItem("Settings", false) { showSettingsScreen() }, LinearLayout.LayoutParams(0, dp(52), 1f))
+
+          val screen = FrameLayout(this)
+          screen.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+          screen.addView(
+              bottomBar,
+              FrameLayout.LayoutParams(-1, dp(64)).apply {
+                  gravity = android.view.Gravity.BOTTOM
+              }
+          )
+          setContentView(screen)
+'''
+              if old not in text:
+                  raise SystemExit("Expected showMainScreen block was not found; refusing unsafe edit")
+              path.write_text(text.replace(old, new, 1))
+              print("Bottom navigation inserted.")
+          PY
+
+      - name: Verify Kotlin source
+        run: grep -n "BITFLOW_BOTTOM_NAV_V1\|bottomBar\|navItem" app/src/main/java/com/example/torrentor/MainActivity.kt
+
+      - name: Commit repair and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/example/torrentor/MainActivity.kt .github/workflows/fix-bottom-nav.yml
+          git commit -m "fix: restore BitFlow bottom navigation" || exit 0
+          git rm .github/workflows/fix-bottom-nav.yml
+          git commit -m "chore: remove one-time bottom navigation fixer"
+          git push
