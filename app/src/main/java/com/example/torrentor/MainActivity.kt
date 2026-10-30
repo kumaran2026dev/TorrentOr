@@ -651,55 +651,61 @@ class MainActivity : AppCompatActivity() {
         speedGraphView = SpeedGraphView(this)
         speedGraphText.visibility = android.view.View.GONE
         speedGraphView.visibility = android.view.View.GONE
-        // BITFLOW_BOTTOM_NAV_V1: fixed navigation stays outside the scrolling content.
-        val bottomBar = LinearLayout(this).apply {
+        setContentView(wrapWithBitFlowBottomNav(scroll, "home"))
+        isOnMainScreen = true
+        updateTorrentList()
+    }
+
+    private fun wrapWithBitFlowBottomNav(content: android.view.View, selected: String): FrameLayout {
+        val d = resources.displayMetrics.density
+        fun dp(v: Int) = (v * d).toInt()
+        val fg = Color.parseColor("#111827")
+        val muted = Color.parseColor("#9CA3AF")
+        val border = Color.parseColor("#E5E7EB")
+
+        val root = FrameLayout(this)
+        root.addView(content, FrameLayout.LayoutParams(-1, -1))
+
+        val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setPadding(dp(12), dp(4), dp(12), dp(5))
             setBackgroundColor(Color.WHITE)
-            elevation = dp(5).toFloat()
+            elevation = dp(8).toFloat()
         }
 
-        fun navItem(label: String, selected: Boolean = false, action: () -> Unit): TextView {
-            return TextView(this).apply {
-                text = label
-                textSize = 13f
+        fun item(icon: String, label: String, key: String, action: () -> Unit): View {
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = android.view.Gravity.CENTER
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(if (selected) Color.WHITE else fg)
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    cornerRadius = dp(10).toFloat()
-                    setColor(if (selected) primary else Color.WHITE)
-                    if (!selected) setStroke(dp(1), border)
+                setPadding(0, dp(2), 0, dp(2))
+                val iconView = TextView(this@MainActivity).apply {
+                    text = icon
+                    textSize = if (key == "add") 28f else 24f
+                    gravity = android.view.Gravity.CENTER
+                    setTextColor(if (selected == key) fg else muted)
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }
+                addView(iconView, LinearLayout.LayoutParams(-1, dp(30)))
+                if (key != "add") {
+                    addView(TextView(this@MainActivity).apply {
+                        text = label
+                        textSize = 10f
+                        gravity = android.view.Gravity.CENTER
+                        setTextColor(if (selected == key) fg else muted)
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    }, LinearLayout.LayoutParams(-1, dp(16)))
                 }
                 setOnClickListener { action() }
             }
         }
 
-        bottomBar.addView(
-            navItem("Downloads", true) { showMainScreen() },
-            LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) }
-        )
-        bottomBar.addView(
-            navItem("+ Add") { showAddDownloadDialog() },
-            LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) }
-        )
-        bottomBar.addView(
-            navItem("Settings") { showSettingsScreen() },
-            LinearLayout.LayoutParams(0, dp(52), 1f)
-        )
+        bar.addView(item("⌂", "Home", "home") { showMainScreen() }, LinearLayout.LayoutParams(0, dp(50), 1f))
+        bar.addView(item("＋", "", "add") { showAddDownloadDialog() }, LinearLayout.LayoutParams(0, dp(50), 1f))
+        bar.addView(item("⚙", "Settings", "settings") { showSettingsScreen() }, LinearLayout.LayoutParams(0, dp(50), 1f))
 
-        val screen = FrameLayout(this)
-        screen.addView(scroll, FrameLayout.LayoutParams(-1, -1))
-        screen.addView(
-            bottomBar,
-            FrameLayout.LayoutParams(-1, dp(64)).apply {
-                gravity = android.view.Gravity.BOTTOM
-            }
-        )
-        setContentView(screen)
-        isOnMainScreen = true
-        updateTorrentList()
+        root.addView(bar, FrameLayout.LayoutParams(-1, dp(62)).apply { gravity = android.view.Gravity.BOTTOM })
+        return root
     }
 
     private fun showAddDownloadDialog() {
@@ -737,7 +743,7 @@ class MainActivity : AppCompatActivity() {
         item("Appearance · Theme: ${currentThemeName()}") { switchTheme() }
         item("About BitFlow") { showAboutDialog() }
         root.addView(Button(this).apply { text = "Back to downloads"; isAllCaps = false; setOnClickListener { showMainScreen() } }, LinearLayout.LayoutParams(-1, dp(48)))
-        setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
+        setContentView(wrapWithBitFlowBottomNav(ScrollView(this).apply { isFillViewport = true; addView(root) }, "settings"))
     }
 
     private fun showAboutDialog() {
