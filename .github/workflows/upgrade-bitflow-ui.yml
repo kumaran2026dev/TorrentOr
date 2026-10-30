@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  administration: write
 
 jobs:
   upgrade-and-build:
@@ -70,10 +71,15 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BitFlow-ui-upgrade-debug-apk
+          name: BitFlow-ui-fixed-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Make repository private
+        run: gh repo edit kumaran2026dev/TorrentOr --visibility private
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Commit UI changes and remove one-time tooling
         run: |
