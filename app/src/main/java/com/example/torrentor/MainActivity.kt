@@ -539,329 +539,166 @@ class MainActivity : AppCompatActivity() {
         stopGlobalStatsAutoRefresh()
         stopRssUiRefresh()
         stopLogUiRefresh()
-
         currentDetailsTab = ""
         currentDetailsTorrentIndex = -1
         currentDetailsContentText = null
         currentDetailsFileListLayout = null
 
-        val density = resources.displayMetrics.density
-        fun dp(value: Int): Int = (value * density).toInt()
-        val blue = Color.parseColor("#007BFF")
-        val dark = Color.parseColor("#343A40")
-        val muted = Color.parseColor("#6C757D")
-        val light = Color.parseColor("#F8F9FA")
-        val white = Color.WHITE
-        val border = Color.parseColor("#E1E5EA")
+        val d = resources.displayMetrics.density
+        fun dp(v: Int) = (v * d).toInt()
+        val bg = Color.parseColor("#F6F7F9")
+        val fg = Color.parseColor("#202124")
+        val muted = Color.parseColor("#6B7280")
+        val primary = Color.parseColor("#2563EB")
+        val border = Color.parseColor("#D9DEE7")
 
-        fun panelBackground(): android.graphics.drawable.GradientDrawable =
-            android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                cornerRadius = dp(4).toFloat()
-                setColor(white)
-                setStroke(dp(1), border)
+        fun button(label: String, primaryButton: Boolean = false, action: () -> Unit) = Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 14f
+            minHeight = dp(44)
+            setTextColor(if (primaryButton) Color.WHITE else fg)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                if (primaryButton) setColor(primary) else { setColor(Color.WHITE); setStroke(dp(1), border) }
             }
-
-        fun fieldBackground(): android.graphics.drawable.GradientDrawable =
-            android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                cornerRadius = dp(4).toFloat()
-                setColor(white)
-                setStroke(dp(1), border)
-            }
-
-        fun styleButton(button: Button, primary: Boolean = false) {
-            button.isAllCaps = false
-            button.minHeight = dp(44)
-            button.setPadding(dp(14), dp(8), dp(14), dp(8))
-            button.textSize = 14f
-            button.background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                cornerRadius = dp(4).toFloat()
-                if (primary) setColor(blue) else { setColor(white); setStroke(dp(1), blue) }
-            }
-            button.setTextColor(if (primary) white else blue)
+            setOnClickListener { action() }
         }
-
-        fun heading(text: String, size: Float = 18f): TextView = TextView(this).apply {
-            this.text = text
+        fun heading(label: String, size: Float = 20f) = TextView(this).apply {
+            text = label
             textSize = size
-            setTextColor(dark)
+            setTextColor(fg)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(0, dp(8), 0, dp(8))
-        }
-
-        fun body(text: String): TextView = TextView(this).apply {
-            this.text = text
-            textSize = 13f
-            setTextColor(muted)
-            setPadding(0, 0, 0, dp(8))
-        }
-
-        fun spacer(height: Int = 8): Space = Space(this).apply {
-            layoutParams = LinearLayout.LayoutParams(1, dp(height))
         }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(24))
-            setBackgroundColor(light)
+            setPadding(dp(16), dp(16), dp(16), dp(20))
+            setBackgroundColor(bg)
         }
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        scroll.addView(root)
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-        val logo = ImageView(this).apply {
-            setImageResource(R.drawable.bitflow_logo)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply { rightMargin = dp(12) }
-        }
-        val headerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        headerText.addView(TextView(this).apply {
-            text = "BitFlow"
-            textSize = 25f
-            setTextColor(dark)
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        })
-        headerText.addView(TextView(this).apply {
-            text = "Torrent Downloader"
-            textSize = 13f
-            setTextColor(muted)
-        })
-        header.addView(logo)
-        header.addView(headerText)
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val logo = ImageView(this).apply { setImageResource(R.drawable.bitflow_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }
+        header.addView(logo, LinearLayout.LayoutParams(dp(44), dp(44)).apply { rightMargin = dp(10) })
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brand.addView(heading("BitFlow", 24f))
+        brand.addView(TextView(this).apply { text = "Torrent Downloader"; textSize = 12f; setTextColor(muted) })
+        header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(button("Settings") { showSettingsScreen() }, LinearLayout.LayoutParams(-2, dp(44)))
         root.addView(header)
-        root.addView(spacer(14))
+        root.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(12)) })
 
-        val quickCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(16))
-            background = panelBackground()
-        }
-        quickCard.addView(heading("Add a download", 17f))
-        quickCard.addView(body("Paste a magnet link or choose a .torrent file."))
-        val magnetInput = EditText(this).apply {
-            hint = "Magnet link or info hash"
-            textSize = 14f
-            setTextColor(dark)
-            setHintTextColor(muted)
+        val search = EditText(this).apply {
+            hint = "Search downloads"
             setSingleLine(true)
-            setPadding(dp(12), 0, dp(12), 0)
-            background = fieldBackground()
-        }
-        quickCard.addView(magnetInput, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(10) })
-        val addRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val addMagnet = Button(this).apply {
-            text = "Add Magnet"
-            styleButton(this, true)
-            setOnClickListener {
-                var magnet = magnetInput.text.toString().trim()
-                if (magnet.isEmpty()) {
-                    Toast.makeText(this@MainActivity, "Enter a magnet link or hash", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-                if (!magnet.startsWith("magnet:")) magnet = "magnet:?xt=urn:btih:$magnet"
-                val hash = extractHashFromMagnetInput(magnet)
-                if (isTorrentAlreadyAddedByHash(hash)) {
-                    showAlreadyAddedMessage()
-                    return@setOnClickListener
-                }
-                magnetInput.setText("")
-                showMagnetMetadataScreen(magnet)
-            }
-        }
-        val selectFile = Button(this).apply {
-            text = "Choose .torrent"
-            styleButton(this)
-            setOnClickListener { pickTorrent.launch("*/*") }
-        }
-        addRow.addView(addMagnet, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
-        addRow.addView(selectFile, LinearLayout.LayoutParams(0, dp(48), 1f))
-        quickCard.addView(addRow)
-        root.addView(quickCard)
-        root.addView(spacer(12))
-
-        val searchBox = EditText(this).apply {
-            hint = "Search your torrents"
             textSize = 14f
-            setTextColor(dark)
-            setHintTextColor(muted)
-            setSingleLine(true)
             setText(searchQuery)
             setSelection(text.length)
             setPadding(dp(14), 0, dp(14), 0)
-            background = fieldBackground()
+            setTextColor(fg)
+            setHintTextColor(muted)
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(Color.WHITE); setStroke(dp(1), border) }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    searchQuery = s?.toString() ?: ""
-                    updateTorrentList()
-                }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { searchQuery = s?.toString() ?: ""; updateTorrentList() }
                 override fun afterTextChanged(s: Editable?) {}
             })
         }
-        root.addView(searchBox, LinearLayout.LayoutParams(-1, dp(48)))
-        root.addView(spacer(12))
+        root.addView(search, LinearLayout.LayoutParams(-1, dp(48)))
+        root.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(10)) })
 
-        val speedCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(16))
-            background = panelBackground()
+        val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (label in arrayOf("All", "Active", "Paused", "Completed")) {
+            filters.addView(button(label, activeFilter == label) {
+                activeFilter = label
+                torrentListViewPrefs().edit().putString("filter", label).apply()
+                selectedTorrents.clear(); selectMode = false; showMainScreen()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
         }
-        speedCard.addView(heading("Transfer activity", 17f))
-        speedGraphText = TextView(this).apply {
-            text = buildSpeedSummaryText()
-            textSize = 13f
-            setTextColor(muted)
-            setPadding(0, 0, 0, dp(10))
-        }
-        speedCard.addView(speedGraphText)
-        speedGraphView = SpeedGraphView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, dp(190))
-            setData(downloadSpeedHistory, uploadSpeedHistory)
-        }
-        speedCard.addView(speedGraphView)
-        root.addView(speedCard)
-        root.addView(spacer(12))
+        root.addView(filters)
 
-        val torrentHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-        torrentHeader.addView(heading("Downloads", 19f), LinearLayout.LayoutParams(0, -2, 1f))
-        val sortButton = Button(this).apply {
-            text = "Sort: $sortMode"
-            styleButton(this)
-            setOnClickListener {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Sort torrents by")
-                    .setItems(TORRENT_SORT_MODES) { _, which ->
-                        sortMode = TORRENT_SORT_MODES[which]
-                        torrentListViewPrefs().edit().putString("sort", sortMode).apply()
-                        showMainScreen()
-                    }
-                    .show()
-            }
-        }
-        torrentHeader.addView(sortButton, LinearLayout.LayoutParams(-2, dp(44)))
-        root.addView(torrentHeader)
-
-        val filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun makeFilterButton(name: String): Button = Button(this).apply {
-            text = name
-            styleButton(this, activeFilter == name)
-            layoutParams = LinearLayout.LayoutParams(-2, dp(42)).apply { rightMargin = dp(6) }
-            setOnClickListener {
-                activeFilter = name
-                torrentListViewPrefs().edit().putString("filter", name).apply()
-                selectedTorrents.clear()
-                selectMode = false
+        val toolbar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        toolbar.addView(heading("Downloads", 19f), LinearLayout.LayoutParams(0, -2, 1f))
+        toolbar.addView(button("Sort") {
+            AlertDialog.Builder(this@MainActivity).setTitle("Sort downloads").setItems(TORRENT_SORT_MODES) { _, which ->
+                sortMode = TORRENT_SORT_MODES[which]
+                torrentListViewPrefs().edit().putString("sort", sortMode).apply()
                 showMainScreen()
-            }
-        }
-        filterRow.addView(makeFilterButton("All"))
-        filterRow.addView(makeFilterButton("Downloading"))
-        filterRow.addView(makeFilterButton("Seeding"))
-        filterRow.addView(makeFilterButton("Paused"))
-        filterRow.addView(makeFilterButton("Completed"))
-        root.addView(horizontalScrollFor(filterRow))
-        root.addView(spacer(8))
+            }.show()
+        }, LinearLayout.LayoutParams(-2, dp(44)))
+        root.addView(toolbar)
 
         val selectRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val selectModeButton = Button(this).apply {
-            text = if (selectMode) "Exit Select Mode" else "Select Torrents"
-            styleButton(this, selectMode)
-            setOnClickListener {
-                selectMode = !selectMode
-                selectedTorrents.clear()
-                showMainScreen()
-            }
-        }
-        selectRow.addView(selectModeButton, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
-        val selectAllButton = Button(this).apply {
-            text = "Select All"
-            styleButton(this)
-            isEnabled = selectMode
-            setOnClickListener {
-                if (!selectMode) return@setOnClickListener
-                selectedTorrents.clear()
-                selectedTorrents.addAll(getVisibleTorrentIndexes())
-                updateTorrentList()
-            }
-        }
-        selectRow.addView(selectAllButton, LinearLayout.LayoutParams(0, dp(44), 1f))
+        selectRow.addView(button(if (selectMode) "Done" else "Select", selectMode) { selectMode = !selectMode; selectedTorrents.clear(); showMainScreen() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(6) })
+        selectRow.addView(button("Select all") { if (selectMode) { selectedTorrents.clear(); selectedTorrents.addAll(getVisibleTorrentIndexes()); updateTorrentList() } }, LinearLayout.LayoutParams(0, dp(42), 1f))
         root.addView(selectRow)
 
         if (selectMode) {
-            val bulkRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            fun bulkButton(label: String, action: () -> Unit): Button = Button(this).apply {
-                text = label
-                styleButton(this)
-                setOnClickListener(action)
-            }
-            bulkRow.addView(bulkButton("Pause") {
-                if (selectedTorrents.isEmpty()) Toast.makeText(this@MainActivity, "No torrents selected", Toast.LENGTH_SHORT).show()
-                else { selectedTorrents.sorted().forEach { sendTorrentAction("PAUSE_TORRENT", it) }; selectedTorrents.clear(); selectMode = false; showMainScreen() }
-            }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
-            bulkRow.addView(bulkButton("Resume") {
-                if (selectedTorrents.isEmpty()) Toast.makeText(this@MainActivity, "No torrents selected", Toast.LENGTH_SHORT).show()
-                else { selectedTorrents.sorted().forEach { sendTorrentAction("RESUME_TORRENT", it) }; selectedTorrents.clear(); selectMode = false; showMainScreen() }
-            }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
-            bulkRow.addView(bulkButton("Recheck") {
-                if (selectedTorrents.isEmpty()) Toast.makeText(this@MainActivity, "No torrents selected", Toast.LENGTH_SHORT).show()
-                else { selectedTorrents.sorted().forEach { TorrentNative.forceRecheck(it) }; selectedTorrents.clear(); selectMode = false; showMainScreen() }
-            }, LinearLayout.LayoutParams(0, dp(44), 1f))
-            root.addView(bulkRow)
+            val bulk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            bulk.addView(button("Pause") { selectedTorrents.toList().forEach { sendTorrentAction("PAUSE_TORRENT", it) }; selectedTorrents.clear(); selectMode = false; showMainScreen() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
+            bulk.addView(button("Resume") { selectedTorrents.toList().forEach { sendTorrentAction("RESUME_TORRENT", it) }; selectedTorrents.clear(); selectMode = false; showMainScreen() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
+            bulk.addView(button("Recheck") { selectedTorrents.toList().forEach { sendTorrentAction("RECHECK_TORRENT", it) }; selectedTorrents.clear(); selectMode = false; showMainScreen() }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            root.addView(bulk)
         }
 
-        listLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(8), 0, 0)
-        }
-        root.addView(listLayout)
+        listLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(listLayout, LinearLayout.LayoutParams(-1, -2))
+        root.addView(Space(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(12)) })
+        root.addView(button("+  Add download", true) { showAddDownloadDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
 
-        val toolsCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(16))
-            background = panelBackground()
-        }
-        toolsCard.addView(heading("Management", 17f))
-        toolsCard.addView(body("Network, storage, search and advanced torrent controls."))
-        fun addToolRow(leftText: String, leftAction: () -> Unit, rightText: String, rightAction: () -> Unit) {
-            val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
-            val left = Button(this@MainActivity).apply { text = leftText; styleButton(this); setOnClickListener { leftAction() } }
-            val right = Button(this@MainActivity).apply { text = rightText; styleButton(this); setOnClickListener { rightAction() } }
-            row.addView(left, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(8) })
-            row.addView(right, LinearLayout.LayoutParams(0, dp(46), 1f))
-            toolsCard.addView(row)
-            toolsCard.addView(spacer(8))
-        }
-        addToolRow("Pause All", {
-            startTorrentService(Intent(this, TorrentService::class.java).apply { putExtra("ACTION", "PAUSE_ALL") })
-        }, "Resume All", {
-            startTorrentService(Intent(this, TorrentService::class.java).apply { putExtra("ACTION", "RESUME_ALL") })
-        })
-        addToolRow("Statistics", { showGlobalStatisticsScreen() }, "Connection", { showConnectionSettingsScreen() })
-        addToolRow("Speed Limits", { showSpeedLimitsScreen() }, "Storage Space", { showStorageSpaceScreen() })
-        addToolRow("Save Folder", { showSaveFolderScreen() }, "Network Features", { showNetworkFeaturesScreen() })
-        addToolRow("RSS Feeds", { showRssScreen() }, "Online Search", { showOnlineSearchScreen() })
-        addToolRow("Execution Log", { showExecutionLogScreen() }, "Web UI", { showWebUiScreen() })
-        addToolRow("Port Forwarding", { showPortForwardingStatusScreen() }, "Clean Deleted", {
-            startTorrentService(Intent(this, TorrentService::class.java).apply { putExtra("ACTION", "CLEAN_DELETED_SAVED_TORRENTS") })
-            Toast.makeText(this, "Deleted torrent records cleaned", Toast.LENGTH_SHORT).show()
-        })
-        root.addView(spacer(12))
-        root.addView(toolsCard)
-
-        val outerScroll = ScrollView(this).apply {
-            addView(root)
-            setFillViewport(true)
-        }
-        setContentView(outerScroll)
+        speedGraphText = TextView(this)
+        speedGraphView = SpeedGraphView(this)
+        speedGraphText.visibility = android.view.View.GONE
+        speedGraphView.visibility = android.view.View.GONE
+        setContentView(scroll)
         isOnMainScreen = true
         updateTorrentList()
     }
+
+    private fun showAddDownloadDialog() {
+        val input = EditText(this).apply { hint = "magnet:?xt=urn:btih:..."; minLines = 3; gravity = android.view.Gravity.TOP }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 8, 24, 0); addView(input, LinearLayout.LayoutParams(-1, 120)) }
+        val dialog = AlertDialog.Builder(this).setTitle("Add download").setView(box).setNegativeButton("Cancel", null).setNeutralButton("Choose .torrent", null).setPositiveButton("Add magnet", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { dialog.dismiss(); pickTorrent.launch("application/x-bittorrent") }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val magnet = input.text.toString().trim()
+                if (magnet.isBlank()) { input.error = "Enter a magnet link"; return@setOnClickListener }
+                dialog.dismiss(); showMagnetMetadataScreen(magnet)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showSettingsScreen() {
+        val d = resources.displayMetrics.density
+        fun dp(v: Int) = (v * d).toInt()
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(24)); setBackgroundColor(Color.parseColor("#F6F7F9")) }
+        root.addView(TextView(this).apply { text = "Settings"; textSize = 24f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(Color.parseColor("#202124")); setPadding(0, 0, 0, dp(14)) })
+        fun item(label: String, action: () -> Unit) {
+            root.addView(Button(this).apply { text = label; isAllCaps = false; textSize = 15f; gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setPadding(dp(16), 0, dp(16), 0); setOnClickListener { action() } }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(8) })
+        }
+        item("Downloads · Save folder") { showSaveFolderScreen() }
+        item("Downloads · Speed limits") { showSpeedLimitsScreen() }
+        item("Network · Connection") { showConnectionScreen() }
+        item("Network · Network features") { showNetworkFeaturesScreen() }
+        item("Discovery · Online search") { showOnlineSearchScreen() }
+        item("Discovery · RSS feeds") { showRssScreen() }
+        item("Diagnostics · Statistics") { showGlobalStatsScreen() }
+        item("Diagnostics · Execution log") { showExecutionLogScreen() }
+        item("Diagnostics · Storage") { showStorageScreen() }
+        item("Appearance · Theme: ${currentThemeName()}") { switchTheme() }
+        item("About BitFlow") { showAboutDialog() }
+        root.addView(Button(this).apply { text = "Back to downloads"; isAllCaps = false; setOnClickListener { showMainScreen() } }, LinearLayout.LayoutParams(-1, dp(48)))
+        setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
+    }
+
+    private fun showAboutDialog() {
+        AlertDialog.Builder(this).setTitle("BitFlow").setMessage("BitFlow: Torrent Downloader\nVersion 1.0.0\n\nFast, simple torrent downloading for Android.").setPositiveButton("OK", null).show()
+    }
+
 
     // ------------------------------------------------------------------ RSS
 
