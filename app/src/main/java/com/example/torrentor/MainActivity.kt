@@ -743,6 +743,49 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    private fun showAddDownloadDialog() {
+        val input = EditText(this).apply { hint = "magnet:?xt=urn:btih:..."; minLines = 3; gravity = android.view.Gravity.TOP }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 8, 24, 0); addView(input, LinearLayout.LayoutParams(-1, 120)) }
+        val dialog = AlertDialog.Builder(this).setTitle("Add download").setView(box).setNegativeButton("Cancel", null).setNeutralButton("Choose .torrent", null).setPositiveButton("Add magnet", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { dialog.dismiss(); pickTorrent.launch("application/x-bittorrent") }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val magnet = input.text.toString().trim()
+                if (magnet.isBlank()) { input.error = "Enter a magnet link"; return@setOnClickListener }
+                dialog.dismiss(); showMagnetMetadataScreen(magnet)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showSettingsScreen() {
+        val d = resources.displayMetrics.density
+        fun dp(v: Int) = (v * d).toInt()
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(24)); setBackgroundColor(Color.parseColor("#F6F7F9")) }
+        root.addView(TextView(this).apply { text = "Settings"; textSize = 24f; setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(Color.parseColor("#202124")); setPadding(0, 0, 0, dp(14)) })
+        fun item(label: String, action: () -> Unit) {
+            root.addView(Button(this).apply { text = label; isAllCaps = false; textSize = 15f; gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setPadding(dp(16), 0, dp(16), 0); setOnClickListener { action() } }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(8) })
+        }
+        item("Downloads · Save folder") { showSaveFolderScreen() }
+        item("Downloads · Speed limits") { showSpeedLimitsScreen() }
+        item("Network · Connection") { showConnectionScreen() }
+        item("Network · Network features") { showNetworkFeaturesScreen() }
+        item("Discovery · Online search") { showOnlineSearchScreen() }
+        item("Discovery · RSS feeds") { showRssScreen() }
+        item("Diagnostics · Statistics") { showGlobalStatsScreen() }
+        item("Diagnostics · Execution log") { showExecutionLogScreen() }
+        item("Diagnostics · Storage") { showStorageScreen() }
+        item("Appearance · Theme: ${currentThemeName()}") { switchTheme() }
+        item("About BitFlow") { showAboutDialog() }
+        root.addView(Button(this).apply { text = "Back to downloads"; isAllCaps = false; setOnClickListener { showMainScreen() } }, LinearLayout.LayoutParams(-1, dp(48)))
+        setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
+    }
+
+    private fun showAboutDialog() {
+        AlertDialog.Builder(this).setTitle("BitFlow").setMessage("BitFlow: Torrent Downloader\nVersion 1.0.0\n\nFast, simple torrent downloading for Android.").setPositiveButton("OK", null).show()
+    }
+
+
     // ------------------------------------------------------------------ RSS
 
     // The list of feeds. A tap on a feed opens that feed in its own screen.
