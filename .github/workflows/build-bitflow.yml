@@ -1,6 +1,5 @@
 name: Build BitFlow APK
 
-# BitFlow CI: build the current main branch after source fixes.
 on:
   workflow_dispatch:
   push:
